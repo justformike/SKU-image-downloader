@@ -1091,7 +1091,7 @@ const htmlContent = `
                             // Download image
                             const blob = await downloadImage(task.url);
                             const ext = getFileExtension(task.url);
-                            const fileName = `${task.sku}_${String(task.index + 1).padStart(2, '0')}.${ext}`;
+                            const fileName = task.sku + "_" + String(task.index).padStart(2, '0') + ".jpg";
 
                             // Write file
                             const fileHandle = await skuFolderHandle.getFileHandle(fileName, { create: true });
