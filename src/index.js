@@ -1192,7 +1192,7 @@ const htmlContent = `
 
                         const blob = await downloadImage(task.url);
                         const ext = getFileExtension(task.url);
-                        const fileName = `${task.sku}_${String(task.index + 1).padStart(2, '0')}.${ext}`;
+                        const fileName = task.sku + "_" + String(task.index).padStart(2, '0') + ".jpg";
 
                         const fileHandle = await skuFolderHandle.getFileHandle(fileName, { create: true });
                         const writable = await fileHandle.createWritable();
