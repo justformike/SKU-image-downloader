@@ -1,6 +1,14 @@
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+
+    if (request.method === 'OPTIONS' && url.pathname === '/proxy') {
+      return new Response(null, { headers: corsHeaders });
+    }
+
+    if (url.pathname === '/proxy') {
+      return proxyImage(url);
+    }
     
     // 处理根路径，返回HTML页面
     if (url.pathname === '/' || url.pathname === '/index.html') {
@@ -18,6 +26,68 @@ export default {
     return new Response('Not Found', { status: 404 });
   },
 };
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type',
+};
+
+async function proxyImage(url) {
+  const target = url.searchParams.get('url');
+  if (!target) {
+    return new Response('Missing url parameter', { status: 400, headers: corsHeaders });
+  }
+
+  let targetUrl;
+  try {
+    targetUrl = new URL(target);
+  } catch (error) {
+    return new Response('Invalid url parameter', { status: 400, headers: corsHeaders });
+  }
+
+  if (targetUrl.protocol !== 'https:' && targetUrl.protocol !== 'http:') {
+    return new Response('Only http and https URLs are supported', { status: 400, headers: corsHeaders });
+  }
+
+  let upstream;
+  try {
+    upstream = await fetch(targetUrl.toString(), {
+      headers: {
+        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'User-Agent': 'Mozilla/5.0 SKU Image Downloader',
+      },
+    });
+  } catch (error) {
+    return new Response('Upstream fetch failed: ' + error.message, { status: 502, headers: corsHeaders });
+  }
+
+  if (!upstream.ok) {
+    return new Response('Upstream returned HTTP ' + upstream.status, {
+      status: upstream.status,
+      headers: corsHeaders,
+    });
+  }
+
+  const contentType = upstream.headers.get('Content-Type') || 'application/octet-stream';
+  if (!contentType.toLowerCase().startsWith('image/')) {
+    return new Response('Upstream response is not an image', { status: 415, headers: corsHeaders });
+  }
+
+  const responseHeaders = new Headers(corsHeaders);
+  responseHeaders.set('Content-Type', contentType);
+  responseHeaders.set('Cache-Control', 'public, max-age=86400');
+
+  const contentLength = upstream.headers.get('Content-Length');
+  if (contentLength) {
+    responseHeaders.set('Content-Length', contentLength);
+  }
+
+  return new Response(upstream.body, {
+    status: 200,
+    headers: responseHeaders,
+  });
+}
 
 // HTML内容
 const htmlContent = `
@@ -1023,10 +1093,8 @@ const htmlContent = `
             const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
             const downloadImage = async (url) => {
-                const response = await fetch(url, {
-                    mode: 'cors',
-                    cache: 'no-cache'
-                });
+                const proxyUrl = "/proxy?url=" + encodeURIComponent(url);
+                const response = await fetch(proxyUrl, { cache: 'no-cache' });
                 
                 if (!response.ok) {
                     throw new Error("HTTP " + response.status + ": " + response.statusText);
